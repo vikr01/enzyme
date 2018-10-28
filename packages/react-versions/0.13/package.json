@@ -1,0 +1,9 @@
+{
+  "name": "react-0.13",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "react": "^16.6.0"
+  }
+}

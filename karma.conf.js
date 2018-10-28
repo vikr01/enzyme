@@ -4,10 +4,18 @@
 
 require('babel-register');
 
+var fs = require('fs');
+var path = require('path');
+var resolve = require('resolve');
+var semver = require('semver');
 var IgnorePlugin = require('webpack').IgnorePlugin;
-var is = require('./packages/enzyme-test-suite/test/_helpers/version').is;
 
-function getPlugins() {
+var reactVersions = fs.readdirSync(path.join(__dirname, 'packages/react-versions'))
+  .map(function absoluteDir(dir) {
+    return path.join(__dirname, 'packages/react-versions', dir);
+  });
+
+function getPlugins(directory) {
   const adapter13 = new IgnorePlugin(/enzyme-adapter-react-13$/);
   const adapter14 = new IgnorePlugin(/enzyme-adapter-react-14$/);
   const adapter154 = new IgnorePlugin(/enzyme-adapter-react-15\.4$/);
@@ -17,6 +25,18 @@ function getPlugins() {
   const adapter163 = new IgnorePlugin(/enzyme-adapter-react-16.3$/);
   const adapter16 = new IgnorePlugin(/enzyme-adapter-react-16$/);
 
+  console.log(directory);
+  console.log(resolve.sync('react', { basedir: directory }));
+
+  /* eslint
+    global-require: 0
+    import/no-dynamic-require: 0
+  */
+  const reactVersion = require(resolve.sync(
+    'react/package.json',
+    { basedir: directory }
+  )).version;
+
   var plugins = [
     adapter13,
     adapter14,
@@ -24,6 +44,10 @@ function getPlugins() {
     adapter15,
     adapter16,
   ];
+
+  function is(range) {
+    return semver.satisfies(reactVersion, range);
+  }
 
   function not(x) {
     return function notPredicate(y) {
@@ -51,6 +75,42 @@ function getPlugins() {
   }
 
   return plugins;
+}
+
+function makeWebpack(directory) {
+  return {
+    devtool: 'inline-source-map',
+    resolve: {
+      extensions: ['', '.js', '.jsx', '.json'],
+      alias: {
+        // dynamic require calls in sinon confuse webpack so we ignore it
+        sinon: 'sinon/pkg/sinon',
+      },
+      modules: [
+        path.join(directory, 'node_modules'),
+        'node_modules',
+      ],
+    },
+    module: {
+      noParse: [
+        // dynamic require calls in sinon confuse webpack so we ignore it
+        /node_modules\/sinon\//,
+        /node_modules\/react\//,
+      ],
+      loaders: [
+        {
+          test: /\.jsx?$/,
+          exclude: /node_modules/,
+          loader: 'babel-loader',
+        },
+        {
+          test: /\.json$/,
+          loader: 'json-loader',
+        },
+      ],
+    },
+    plugins: getPlugins(directory),
+  };
 }
 
 module.exports = function karma(config) {
@@ -93,34 +153,7 @@ module.exports = function karma(config) {
       'packages/enzyme-test-suite/test/*.{jsx,js}': ['webpack', 'sourcemap'],
     },
 
-    webpack: {
-      devtool: 'inline-source-map',
-      resolve: {
-        extensions: ['', '.js', '.jsx', '.json'],
-        alias: {
-          // dynamic require calls in sinon confuse webpack so we ignore it
-          sinon: 'sinon/pkg/sinon',
-        },
-      },
-      module: {
-        noParse: [
-          // dynamic require calls in sinon confuse webpack so we ignore it
-          /node_modules\/sinon\//,
-        ],
-        loaders: [
-          {
-            test: /\.jsx?$/,
-            exclude: /node_modules/,
-            loader: 'babel-loader',
-          },
-          {
-            test: /\.json$/,
-            loader: 'json-loader',
-          },
-        ],
-      },
-      plugins: getPlugins(),
-    },
+    webpack: makeWebpack(reactVersions[0]),
 
     webpackServer: {
       noInfo: true,
